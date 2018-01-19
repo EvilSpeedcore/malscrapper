@@ -4,7 +4,7 @@ from sklearn.ensemble import RandomForestClassifier
 
 
 class FeatureConstructor(object):
-    def __init__(self, ):
+    def __init__(self):
         pass
 
     def preprocess(self, filename):
@@ -17,4 +17,4 @@ class FeatureConstructor(object):
         forest.fit(x_train, y_train)
         print("Правильность на обучающем наборе: {:.3f}".format(forest.score(x_train, y_train)))
         print("Правильность на тестовом наборе: {:.3f}".format(forest.score(x_test, y_test)))
-        #print('Важности признаков:\n{}'.format(forest.feature_importances_))
+        print('Важности признаков:\n{}'.format(forest.feature_importances_))
