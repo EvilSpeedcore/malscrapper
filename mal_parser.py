@@ -15,7 +15,6 @@ class MALParser(object):
         self.anime_scores = self.mal_profile.anime_scores
         self.anime_urls = self.mal_profile.anime_urls
         self.parser = 'lxml'
-        self.df_filename = 'title.csv'
 
     def parse_modern_anime_list(self):
         driver = webdriver.Chrome('chromedriver.exe')
@@ -41,6 +40,8 @@ class MALParser(object):
                 except ValueError:
                     self.anime_scores.append(0)
 
+        self.create_anime_list()
+
     def parse_classic_anime_list(self):
         driver = webdriver.Chrome('chromedriver.exe')
         driver.get(self.url)
@@ -63,9 +64,10 @@ class MALParser(object):
             self.anime_urls.append(''.join(['https://myanimelist.net', anchor_tag.get('href')]))
             [self.anime_titles.append(span_tag.string) for span_tag in anchor_tag.find_all('span')]
 
+        self.create_anime_list()
+
     def parse_modern_anime_list_without_driver(self):
-        """Not using web driver, thus faster than standard modern anime list parser,
-         but only works with approximately 300 entries."""
+        """Faster. Works with approximately 300 entries."""
         get_request = requests.get(self.url)
         data = get_request.text
         soup = BeautifulSoup(data, self.parser)
@@ -79,29 +81,28 @@ class MALParser(object):
         self.anime_urls = list(map(lambda x: ''.join(['https://myanimelist.net', x]),
                                    [match[2].replace('\\', '') for match in matches]))
 
+        self.create_anime_list()
+
     def parse_anime_page(self, url):
-        get_request = requests.get(url)
-        data = get_request.text
+        data = requests.get(url).text
         soup = BeautifulSoup(data, self.parser)
         span_tags = soup.find_all('span', class_='dark_text')
-        required_colons = ('English:', 'Type:', 'Episodes:', 'Studios:', 'Source:', 'Genres:', 'Score:')
-        parsed_colons = []
-        for tag in span_tags:
-            if tag.string in required_colons:
-                parsed_colons.append(tag.string)
-                if tag.next_sibling.next_sibling:
-                    self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.next_sibling.string)
-                else:
-                    self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.strip())
-        lost_colons = set(required_colons) - set(parsed_colons)
-        [self.anime_list.setdefault(item.strip(':'), []).append('NaN') if lost_colons else '' for item in lost_colons]
+        required_colons = ('Type:', 'Episodes:', 'Studios:', 'Source:', 'Genres:', 'Score:')
+        colons = list(filter(lambda x: x.string in required_colons, span_tags))
+        for tag in colons:
+            if tag.next_sibling.next_sibling:
+                self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.next_sibling.string)
+            else:
+                self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.strip())
+        [self.anime_list.setdefault(colon, []).append('NaN') for colon in required_colons if not span_tags]
+        time.sleep(0.15)
 
     def create_anime_list(self):
         for url in self.anime_urls:
             self.parse_anime_page(url)
         self.anime_list['Personal score'] = self.anime_scores
-        for index, value in enumerate(self.anime_list['English']):
-            if value == 'NaN':
-                self.anime_list['English'][index] = self.anime_titles[index]
+        self.anime_list['Title'] = self.anime_titles
+
+    def export_anime_list_to_csv(self, filename):
         anime_data_frame = pd.DataFrame(self.anime_list)
-        anime_data_frame.to_csv(self.df_filename, index=False)
+        anime_data_frame.to_csv(filename, index=False)
