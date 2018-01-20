@@ -94,7 +94,7 @@ class MALParser(object):
                 self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.next_sibling.string)
             else:
                 self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.strip())
-        [self.anime_list.setdefault(colon, []).append('NaN') for colon in required_colons if not span_tags]
+        [self.anime_list.setdefault(colon.strip(':'), []).append('NaN') for colon in required_colons if not span_tags]
         time.sleep(0.15)
 
     def create_anime_list(self):
