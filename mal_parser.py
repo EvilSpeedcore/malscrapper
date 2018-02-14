@@ -1,8 +1,9 @@
 import re
 import time
-import pandas as pd
+from concurrent import futures
 import requests
-from bs4 import BeautifulSoup
+import pandas as pd
+from bs4 import BeautifulSoup, SoupStrainer
 from selenium import webdriver
 
 
@@ -39,8 +40,7 @@ class MALParser(object):
                     self.anime_scores.append(int(score_td_tag.a.string.strip()))
                 except ValueError:
                     self.anime_scores.append(0)
-
-        self.create_anime_list()
+        driver.quit()
 
     def parse_classic_anime_list(self):
         driver = webdriver.Chrome('chromedriver.exe')
@@ -63,8 +63,7 @@ class MALParser(object):
                 self.anime_scores.append(0)
             self.anime_urls.append(''.join(['https://myanimelist.net', anchor_tag.get('href')]))
             [self.anime_titles.append(span_tag.string) for span_tag in anchor_tag.find_all('span')]
-
-        self.create_anime_list()
+        driver.quit()
 
     def parse_modern_anime_list_without_driver(self):
         """Faster. Works with approximately 300 entries."""
@@ -81,25 +80,33 @@ class MALParser(object):
         self.anime_urls = list(map(lambda x: ''.join(['https://myanimelist.net', x]),
                                    [match[2].replace('\\', '') for match in matches]))
 
-        self.create_anime_list()
-
     def parse_anime_page(self, url):
-        data = requests.get(url).text
-        soup = BeautifulSoup(data, self.parser)
-        span_tags = soup.find_all('span', class_='dark_text')
-        required_colons = ('Type:', 'Episodes:', 'Studios:', 'Source:', 'Genres:', 'Score:')
-        colons = list(filter(lambda x: x.string in required_colons, span_tags))
-        for tag in colons:
-            if tag.next_sibling.next_sibling:
-                self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.next_sibling.string)
+        time.sleep(3)
+        try:
+            request = requests.get(url)
+            if request.status_code == 200:
+                html = request.text
+                strainer = SoupStrainer('div')
+                soup = BeautifulSoup(html, self.parser, parse_only=strainer)
+                span_tags = soup.find_all('span', class_='dark_text')
+                required_colons = ('Type:', 'Episodes:', 'Studios:', 'Source:', 'Genres:', 'Score:')
+                colons = list(filter(lambda x: x.text in required_colons, span_tags))
+                for tag in colons:
+                    if tag.next_sibling.next_sibling:
+                        self.anime_list.setdefault(tag.text.strip(':'), []).append(tag.next_sibling.next_sibling.text)
+                    else:
+                        self.anime_list.setdefault(tag.text.strip(':'), []).append(str(tag.next_sibling.strip()))
+                print(f'{url} processed.')
             else:
-                self.anime_list.setdefault(tag.string.strip(':'), []).append(tag.next_sibling.strip())
-        [self.anime_list.setdefault(colon, []).append('NaN') for colon in required_colons if not span_tags]
-        time.sleep(0.15)
+                print(request)
+                time.sleep(4)
+                self.parse_anime_page(url)
+        except Exception as e:
+            print(e)
 
     def create_anime_list(self):
-        for url in self.anime_urls:
-            self.parse_anime_page(url)
+        with futures.ThreadPoolExecutor(max_workers=5) as e:
+            e.map(self.parse_anime_page, self.anime_urls)
         self.anime_list['Personal score'] = self.anime_scores
         self.anime_list['Title'] = self.anime_titles
 
