@@ -97,7 +97,6 @@ class MALParser(object):
                         self.anime_list.setdefault(tag.text.strip(':'), []).append(str(tag.next_sibling.strip()))
                 print(f'{url} processed.')
             else:
-                print(request)
                 time.sleep(4)
                 self.parse_anime_page(url)
         except Exception as e:
